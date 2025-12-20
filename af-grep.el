@@ -24,7 +24,7 @@
 
 ;;; Commentary:
 
-;; Grep-like functionality implemented in pure Emacs lisp.
+;; Grep-like functionality implemented in pure Emacs Lisp.
 ;; Useful in environments without grep and find installed (such as MS-Windows).
 
 ;;; Code:
@@ -33,11 +33,13 @@
 (require 'xref)
 
 (defun af-grep-read-directory-name (&optional prompt)
+  "Prompt for directory name.  Optionally, provide PROMPT."
   (expand-file-name
    (read-directory-name (or prompt "Base directory: ")
 		        default-directory nil t)))
 
 (defun af-grep-read-regexp (&optional prompt)
+  "Prompt for regexp.  Optionally, provide PROMPT."
   (read-regexp (or prompt "Search for")
                'find-tag-default-as-regexp
                'grep-regexp-history))
@@ -45,6 +47,9 @@
 ;;;; Find
 
 (defun af-grep-find-files (directory regexp &optional dir-filter)
+  "Find files matching REGEXP in DIRECTORY.
+DIR-FILTER is an optional predicate accepting (PARENT-DIR CURRENT-DIR);
+if it returns nil, do not descend into CURRENT-DIR."
   (setq directory (directory-file-name directory))
   (let ((results nil)
         (full-files nil)
@@ -67,11 +72,17 @@
     (nconc results (nreverse full-files))))
 
 (defun af-grep-find-files-excluding-vc (directory regexp)
+  "Like `af-grep-find-files', but don't descend in directories listed in `vc-directory-exclusion-list'."
   (af-grep-find-files directory regexp
                       (lambda (parent file)
                         (not (member file vc-directory-exclusion-list)))))
 
 (defmacro af-grep-with-project-files-fallback (&rest body)
+  "Execute BODY with `project-files' temporarily redefined.
+
+If the original `project-files' function errors (e.g., if Unix find is
+unavailable), it falls back to `af-grep-find-files-excluding-vc' to
+find files within the project."
   (declare (indent 0))
   (let ((orig (make-symbol "orig")))
     `(cl-letf* ((,orig (symbol-function 'project-files))
@@ -88,12 +99,14 @@
 
 ;;;###autoload
 (defun af-grep-project-find-file (&optional include-all)
+  "Like `project-find-file', but with fallback in case it errors out."
   (interactive "P")
   (af-grep-with-project-files-fallback
     (project-find-file include-all)))
 
 ;;;###autoload
 (defun af-grep-project-find-dir ()
+  "Like `project-find-dir', but with fallback in case it errors out."
   (interactive)
   (af-grep-with-project-files-fallback
     (project-find-dir)))
@@ -106,6 +119,17 @@
   :group 'af-grep)
 
 (defun af-grep-match-files (files regexp)
+  "Search FILES (and their subdirectories) for REGEXP.
+
+Returns a list of (FILE . MATCHES).
+Each MATCHES entry is a list of line-level data:
+
+\((:line . LINENUM-INT) (:text . LINETEXT-STRING) (:matches . LINE-MATCHES)).
+
+LINE-MATCHES is a list of match details for that line:
+\((:match-line-start . START-COL-INT) (:match-len . LENGTH-INT))
+
+Uses `af-grep-insert-files-literally' to determine how files are read."
   (let ((insert-file-contents-function (if af-grep-insert-files-literally
                                            #'insert-file-contents-literally
                                          #'insert-file-contents)))
@@ -163,6 +187,9 @@
         (process-files-and-dirs files)))))
 
 (defun af-grep-matches-to-xref (matches)
+  "Convert MATCHES into a list of `xref-match' objects.
+
+MATCHES uses the same structure produced by `af-grep-match-files'."
   (cl-loop
    for (file . file-matches) in matches
    nconc (cl-loop
@@ -193,6 +220,7 @@
                                            len))))))
 
 (defun af-grep-xrefs-show (regexp files)
+  "Show REGEXP matches from FILES in the xref UI."
   (let ((fetcher (lambda (regexp files)
                    (unless files
                      (user-error "Empty file list"))
@@ -206,11 +234,15 @@
 (defvar af-grep-file-regexp-history nil)
 
 (defun af-grep-read-file-regexp ()
+  "Read a file-name regular expression.
+Uses `af-grep-file-regexp-history' for history."
   (read-regexp "File name regexp"
                "." 'af-grep-file-regexp-history))
 
 ;;;###autoload
 (defun af-grep-rgrep (regexp file-regexp dir)
+  "Like `rgrep', but doesn't require external programs.
+Also, uses FILE-REGEXP instead of glob to match file names."
   (interactive
    (list
     (af-grep-read-regexp)
@@ -221,6 +253,7 @@
 
 ;;;###autoload
 (defun af-grep-project-find-regexp (regexp)
+  "Like `project-find-regexp', but doesn't require external programs."
   (interactive (list (af-grep-read-regexp)))
   (if current-prefix-arg
       (let ((directory (af-grep-read-directory-name))
@@ -234,6 +267,7 @@
 
 ;;;###autoload
 (defun af-grep-dired-do-find-regexp (regexp)
+  "Like `dired-do-find-regexp', but doesn't require external programs."
   (interactive (list (read-regexp "Find regexp"
                                   nil 'dired-regexp-history))
                dired-mode)
@@ -241,6 +275,10 @@
 
 ;;;###autoload
 (defun af-grep-dired-do-occur (regexp &optional nlines)
+  "Perform `multi-occur' on marked files matching REGEXP.
+Optionally, NLINES parameter can be passed to `multi-occur'.
+Each file gets opened in it's own buffer, so this might be slow
+on many files."
   (interactive (occur-read-primary-args) dired-mode)
   (multi-occur
    (mapcar #'find-file-noselect (dired-get-marked-files))
