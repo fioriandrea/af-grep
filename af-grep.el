@@ -31,6 +31,7 @@
 
 (require 'cl-lib)
 (require 'xref)
+(require 'dired)
 
 (defun af-grep-read-directory-name (&optional prompt)
   "Prompt for directory name.  Optionally, provide PROMPT."
@@ -72,9 +73,9 @@ if it returns nil, do not descend into CURRENT-DIR."
     (nconc results (nreverse full-files))))
 
 (defun af-grep-find-files-excluding-vc (directory regexp)
-  "Like `af-grep-find-files', but don't descend in directories listed in `vc-directory-exclusion-list'."
+  "Like `af-grep-find-files', but don't descend into vc-managed dirs."
   (af-grep-find-files directory regexp
-                      (lambda (parent file)
+                      (lambda (_parent file)
                         (not (member file vc-directory-exclusion-list)))))
 
 (defmacro af-grep-with-project-files-fallback (&rest body)
@@ -206,7 +207,6 @@ MATCHES uses the same structure produced by `af-grep-match-files'."
                   for line-match in (nreverse line-matches)
                   for start = (alist-get :match-line-start line-match)
                   for len = (alist-get :match-len line-match)
-                  for end = (+ start len)
                   for sumstart = (if (= start first-start)
                                      0 start)
                   for summary = (substring text sumstart prev-start)
@@ -258,7 +258,7 @@ Also, uses FILE-REGEXP instead of glob to match file names."
   (if current-prefix-arg
       (let ((directory (af-grep-read-directory-name))
             (file-regexp (af-grep-read-file-regexp)))
-        (af-rgrep regexp file-regexp directory))
+        (af-grep-rgrep regexp file-regexp directory))
     (let* ((pr (project-current t))
            (default-directory (project-root pr))
            (files (af-grep-with-project-files-fallback
